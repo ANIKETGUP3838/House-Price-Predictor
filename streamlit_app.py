@@ -73,19 +73,6 @@ st.subheader("📊 Model Evaluation")
 st.write(f"**RMSE:** ₹ {rmse:,.0f}")
 st.write(f"**R² Score:** {r2:.2f}")
 
-# Histogram visualization
-st.markdown("---")
-st.subheader("📈 Where Your Predicted Price Falls")
-
-fig, ax = plt.subplots(figsize=(10, 4))
-sns.histplot(data["PRICE"], bins=30, kde=True, ax=ax, color="skyblue", label="Historical Prices")
-ax.axvline(prediction, color='red', linestyle='--', label=f'Predicted: ₹{prediction:,.0f}')
-ax.set_xlabel("Price (₹)")
-ax.set_ylabel("Frequency")
-ax.set_title("Price Distribution")
-ax.legend()
-st.pyplot(fig)
-
 # Confidence interval
 st.markdown("### 🔍 Prediction Confidence Interval")
 
