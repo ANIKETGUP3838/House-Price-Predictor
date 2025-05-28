@@ -235,3 +235,4 @@ with tab1:
 with tab2:
     st.header("🔍 Data Preview")
     st.dataframe(data.head(10))
+
