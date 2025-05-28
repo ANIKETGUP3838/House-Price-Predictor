@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
+import shap
+import io
 
 st.set_page_config(page_title="🏠 House Price Predictor", layout="wide")
 
@@ -15,13 +18,15 @@ st.title("🏠 House Price Prediction App")
 st.sidebar.header("📁 Upload Your CSV")
 uploaded_file = st.sidebar.file_uploader("Upload 'Test.csv'", type=["csv"])
 
-# Load and simulate price only if PRICE column missing
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
     if "PRICE" not in df.columns:
         np.random.seed(42)
-        df["PRICE"] = 200000 + (df["SQUARE_FT"] * 4000) + (df["BHK_NO."] * 100000) + np.random.randint(-100000, 100000, size=len(df))
+        df["PRICE"] = (
+            200000 + (df["SQUARE_FT"] * 4000) + (df["BHK_NO."] * 100000) +
+            np.random.randint(-100000, 100000, size=len(df))
+        )
     return df
 
 if uploaded_file is not None:
@@ -30,93 +35,130 @@ else:
     st.warning("Please upload a `Test.csv` file to proceed.")
     st.stop()
 
-# Features & target
 features = ["UNDER_CONSTRUCTION", "RERA", "BHK_NO.", "SQUARE_FT", "READY_TO_MOVE", "RESALE"]
 target = "PRICE"
 
-# Sidebar: user input for prediction
 st.sidebar.header("🏗️ House Features for Prediction")
 
+# Tooltips for features
+feature_tooltips = {
+    "UNDER_CONSTRUCTION": "Is the property currently under construction? (0 = No, 1 = Yes)",
+    "RERA": "Is the property RERA approved? (0 = No, 1 = Yes)",
+    "BHK_NO.": "Number of bedrooms, halls, kitchens (BHK)",
+    "SQUARE_FT": "Total square feet area",
+    "READY_TO_MOVE": "Is the property ready to move in? (0 = No, 1 = Yes)",
+    "RESALE": "Is this a resale property? (0 = No, 1 = Yes)"
+}
+
 def user_input():
-    under_construction = st.sidebar.selectbox("Under Construction", [0, 1])
-    rera = st.sidebar.selectbox("RERA Approved", [0, 1])
-    bhk = st.sidebar.slider("Number of BHK", 1, 5, 2)
-    sqft = st.sidebar.slider("Square Feet", 300, 5000, 1200)
-    ready = st.sidebar.selectbox("Ready to Move", [0, 1])
-    resale = st.sidebar.selectbox("Is Resale", [0, 1])
-    return pd.DataFrame([[under_construction, rera, bhk, sqft, ready, resale]], columns=features)
+    inputs = {}
+    for feat in features:
+        if feat in ["UNDER_CONSTRUCTION", "RERA", "READY_TO_MOVE", "RESALE"]:
+            inputs[feat] = st.sidebar.selectbox(f"{feat.replace('_', ' ').title()}",
+                                               [0, 1],
+                                               help=feature_tooltips[feat])
+        elif feat == "BHK_NO.":
+            inputs[feat] = st.sidebar.slider("Number of BHK", 1, 5, 2, help=feature_tooltips[feat])
+        elif feat == "SQUARE_FT":
+            inputs[feat] = st.sidebar.slider("Square Feet", 300, 5000, 1200, help=feature_tooltips[feat])
+    return pd.DataFrame([inputs])
 
 input_df = user_input()
 
-# Train model
+# Model selection
+st.sidebar.header("⚙️ Select Model")
+model_choice = st.sidebar.radio("Choose regression model", ("Linear Regression", "Random Forest"))
+
 X = data[features]
 y = data[target]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-model = LinearRegression()
-model.fit(X_train, y_train)
+if model_choice == "Linear Regression":
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    prediction = model.predict(input_df)[0]
+    # Feature importance (coefficients)
+    fi_df = pd.DataFrame({
+        "Feature": features,
+        "Importance": model.coef_
+    }).sort_values(by="Importance", key=abs, ascending=False)
+else:
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    prediction = model.predict(input_df)[0]
+    # Feature importance from RF
+    fi_df = pd.DataFrame({
+        "Feature": features,
+        "Importance": model.feature_importances_
+    }).sort_values(by="Importance", ascending=False)
 
-# Evaluate model
-y_pred = model.predict(X_test)
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2 = r2_score(y_test, y_pred)
 
-# Predict for user input
-prediction = model.predict(input_df)[0]
-
-# Sample data preview
-st.markdown("---")
-st.subheader("🔍 Sample Data")
-st.dataframe(data.head())
-
-# Display prediction
 st.subheader("💰 Predicted House Price")
 st.success(f"₹ {prediction:,.0f}")
 
-# Display evaluation
 st.markdown("---")
 st.subheader("📊 Model Evaluation")
+st.write(f"**Model:** {model_choice}")
 st.write(f"**RMSE:** ₹ {rmse:,.0f}")
 st.write(f"**R² Score:** {r2:.2f}")
 
-# Confidence interval
+# Confidence / prediction interval for Random Forest (using quantiles of trees predictions)
+if model_choice == "Random Forest":
+    preds_per_tree = np.array([t.predict(input_df)[0] for t in model.estimators_])
+    lower = np.percentile(preds_per_tree, 5)
+    upper = np.percentile(preds_per_tree, 95)
+else:
+    residual_std = np.std(y_test - y_pred)
+    lower = prediction - residual_std
+    upper = prediction + residual_std
+
 st.markdown("### 🔍 Prediction Confidence Interval")
-residual_std = np.std(y_test - y_pred)
-lower = prediction - residual_std
-upper = prediction + residual_std
 st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
 
-# Tabs for Prediction and Visualization
-tab1, tab2 = st.tabs(["🔮 Prediction", "📊 Visualizations"])
+# Feature importance plot
+st.subheader("🔑 Feature Importance")
+fig_fi, ax_fi = plt.subplots()
+sns.barplot(data=fi_df, x="Importance", y="Feature", palette="viridis", ax=ax_fi)
+ax_fi.set_title("Feature Importance")
+st.pyplot(fig_fi)
+
+# SHAP explainability only for Random Forest (to save compute)
+if model_choice == "Random Forest":
+    st.subheader("🧠 Model Explanation (SHAP values)")
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_train)
+
+    # Show SHAP summary plot
+    st.write("SHAP Summary Plot (global feature impact)")
+    fig_shap, ax_shap = plt.subplots()
+    shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
+    st.pyplot(fig_shap)
+
+    # Show SHAP force plot for user input
+    st.write("SHAP Force Plot for your input (local explanation)")
+    shap.initjs()
+    force_plot = shap.force_plot(explainer.expected_value, 
+                                explainer.shap_values(input_df), 
+                                input_df, matplotlib=True)
+    st.pyplot(force_plot)
+
+# Download prediction result
+st.markdown("---")
+st.subheader("💾 Download Your Prediction")
+result_df = input_df.copy()
+result_df[target] = prediction
+csv = result_df.to_csv(index=False)
+st.download_button(label="Download prediction as CSV", data=csv, file_name="house_price_prediction.csv", mime="text/csv")
+
+# Data preview & some visualizations
+tab1, tab2 = st.tabs(["📊 Visualizations", "🔍 Data Preview"])
 
 with tab1:
-    st.header("🔮 House Price Prediction")
-
-    # Show input features from sidebar as static
-    st.subheader("🏗️ Selected House Features")
-    st.write(input_df)
-
-    st.subheader("💰 Predicted Price")
-    st.success(f"₹ {prediction:,.0f}")
-
-    st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
-
-    st.markdown("---")
-    st.subheader("📈 Price Distribution")
-    fig1, ax1 = plt.subplots(figsize=(10, 4))
-    sns.histplot(data["PRICE"], bins=30, kde=True, ax=ax1, color="skyblue", label="Prices")
-    ax1.axvline(prediction, color='red', linestyle='--', label=f'Predicted: ₹{prediction:,.0f}')
-    ax1.set_xlabel("Price (₹)")
-    ax1.set_ylabel("Count")
-    ax1.legend()
-    st.pyplot(fig1)
-
-    st.subheader("📊 Model Evaluation")
-    st.write(f"**RMSE:** ₹ {rmse:,.0f}")
-    st.write(f"**R² Score:** {r2:.2f}")
-
-with tab2:
-    st.header("📊 Data Visualizations for Price Estimation")
+    st.header("📊 Data Visualizations")
 
     st.subheader("🏗️ Square Foot vs Price")
     fig2, ax2 = plt.subplots()
@@ -142,7 +184,6 @@ with tab2:
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
 
-    st.subheader("📐 Pairplot (sampled)")
-    sampled = data.sample(min(200, len(data)))
-    pairplot_fig = sns.pairplot(sampled[["PRICE", "SQUARE_FT", "BHK_NO.", "RESALE"]], diag_kind='kde')
-    st.pyplot(pairplot_fig.fig)
+with tab2:
+    st.header("🔍 Sample Data")
+    st.dataframe(data.head())
