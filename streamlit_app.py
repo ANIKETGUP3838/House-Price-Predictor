@@ -1,40 +1,71 @@
-
+# app.py
 import streamlit as st
-import joblib
+import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
 
-# Load model and encoders
-model = joblib.load("ready_to_move_model.pkl")
-le_posted_by = joblib.load("posted_by_encoder.pkl")
-le_bhk_or_rk = joblib.load("bhk_or_rk_encoder.pkl")
+st.set_page_config(page_title="House Price Predictor", layout="wide")
 
-st.title("🏠 Ready to Move Property Predictor")
+st.title("🏠 House Price Prediction App")
 
-# User input
-posted_by = st.selectbox("Posted By", le_posted_by.classes_)
-under_construction = st.selectbox("Under Construction", [0, 1])
-rera = st.selectbox("RERA Registered", [0, 1])
-bhk_no = st.slider("Number of BHK", 1, 10, 2)
-bhk_or_rk = st.selectbox("BHK or RK", le_bhk_or_rk.classes_)
-square_ft = st.number_input("Square Footage", min_value=100.0, max_value=10000.0, value=800.0)
-resale = st.selectbox("Resale", [0, 1])
-longitude = st.number_input("Longitude", value=77.0)
-latitude = st.number_input("Latitude", value=28.0)
+# Load the dataset
+@st.cache_data
+def load_data():
+    df = pd.read_csv("Test.csv")
+    # Simulate price for demo purposes: PRICE = base + (sqft * rate) + bhk influence
+    np.random.seed(42)
+    df["PRICE"] = 200000 + (df["SQUARE_FT"] * 4000) + (df["BHK_NO."] * 100000) + np.random.randint(-100000, 100000, size=len(df))
+    return df
 
-# Prediction
-if st.button("Predict"):
-    features = np.array([[
-        le_posted_by.transform([posted_by])[0],
-        under_construction,
-        rera,
-        bhk_no,
-        le_bhk_or_rk.transform([bhk_or_rk])[0],
-        square_ft,
-        resale,
-        longitude,
-        latitude
-    ]])
+data = load_data()
 
-    prediction = model.predict(features)[0]
-    result = "✅ Ready to Move" if prediction == 1 else "🚧 Not Ready Yet"
-    st.success(f"Prediction: {result}")
+# Feature selection
+features = ["UNDER_CONSTRUCTION", "RERA", "BHK_NO.", "SQUARE_FT", "READY_TO_MOVE", "RESALE"]
+target = "PRICE"
+
+# Sidebar: input fields for user prediction
+st.sidebar.header("Input House Features")
+def user_input():
+    under_construction = st.sidebar.selectbox("Under Construction", [0, 1])
+    rera = st.sidebar.selectbox("RERA Approved", [0, 1])
+    bhk = st.sidebar.slider("Number of BHK", 1, 5, 2)
+    sqft = st.sidebar.slider("Square Feet", 300, 5000, 1200)
+    ready = st.sidebar.selectbox("Ready to Move", [0, 1])
+    resale = st.sidebar.selectbox("Is Resale", [0, 1])
+
+    return pd.DataFrame([[under_construction, rera, bhk, sqft, ready, resale]],
+                        columns=features)
+
+input_df = user_input()
+
+# Train-test split
+X = data[features]
+y = data[target]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Model training
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Model evaluation
+y_pred = model.predict(X_test)
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+r2 = r2_score(y_test, y_pred)
+
+# Predictions
+prediction = model.predict(input_df)[0]
+
+# Display predictions
+st.subheader("Predicted House Price 💰")
+st.success(f"₹ {prediction:,.0f}")
+
+st.markdown("---")
+st.subheader("Model Evaluation")
+st.write(f"**RMSE:** ₹ {rmse:,.0f}")
+st.write(f"**R² Score:** {r2:.2f}")
+
+st.markdown("---")
+st.subheader("Sample Data")
+st.dataframe(data.head())
