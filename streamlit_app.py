@@ -82,6 +82,75 @@ upper = prediction + residual_std
 
 st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
 
+tab1, tab2 = st.tabs(["🔮 Prediction", "📊 Visualizations"])
+
+with tab1:
+    st.header("🔮 House Price Prediction")
+    
+    st.subheader("🏗️ Enter House Features")
+    under_construction = st.selectbox("Under Construction", [0, 1])
+    rera = st.selectbox("RERA Approved", [0, 1])
+    bhk = st.slider("Number of BHK", 1, 5, 2)
+    sqft = st.slider("Square Feet", 300, 5000, 1200)
+    ready = st.selectbox("Ready to Move", [0, 1])
+    resale = st.selectbox("Is Resale", [0, 1])
+
+    input_df = pd.DataFrame([[under_construction, rera, bhk, sqft, ready, resale]], columns=features)
+    prediction = model.predict(input_df)[0]
+
+    st.subheader("💰 Predicted Price")
+    st.success(f"₹ {prediction:,.0f}")
+    
+    residual_std = np.std(y_test - y_pred)
+    lower = prediction - residual_std
+    upper = prediction + residual_std
+    st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
+
+    st.markdown("---")
+    st.subheader("📈 Price Distribution")
+    fig1, ax1 = plt.subplots(figsize=(10, 4))
+    sns.histplot(data["PRICE"], bins=30, kde=True, ax=ax1, color="skyblue", label="Prices")
+    ax1.axvline(prediction, color='red', linestyle='--', label=f'Predicted: ₹{prediction:,.0f}')
+    ax1.set_xlabel("Price (₹)")
+    ax1.set_ylabel("Count")
+    ax1.legend()
+    st.pyplot(fig1)
+
+    st.subheader("📊 Model Evaluation")
+    st.write(f"**RMSE:** ₹ {rmse:,.0f}")
+    st.write(f"**R² Score:** {r2:.2f}")
+
+with tab2:
+    st.header("📊 Data Visualizations for Price Estimation")
+
+    st.subheader("🏗️ Square Foot vs Price")
+    fig2, ax2 = plt.subplots()
+    sns.regplot(x="SQUARE_FT", y="PRICE", data=data, ax=ax2, line_kws={"color": "red"})
+    st.pyplot(fig2)
+
+    st.subheader("🛏️ Average Price by BHK")
+    avg_price_bhk = data.groupby("BHK_NO.")["PRICE"].mean().reset_index()
+    fig3, ax3 = plt.subplots()
+    sns.barplot(data=avg_price_bhk, x="BHK_NO.", y="PRICE", palette="Blues", ax=ax3)
+    ax3.set_ylabel("Avg Price (₹)")
+    st.pyplot(fig3)
+
+    st.subheader("📦 Ready to Move vs Price")
+    fig4, ax4 = plt.subplots()
+    sns.boxplot(data=data, x="READY_TO_MOVE", y="PRICE", palette="Set2", ax=ax4)
+    ax4.set_xticklabels(["No", "Yes"])
+    st.pyplot(fig4)
+
+    st.subheader("📉 Correlation Heatmap")
+    fig5, ax5 = plt.subplots()
+    corr = data[features + [target]].corr()
+    sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
+    st.pyplot(fig5)
+
+    st.subheader("📐 Pairplot (sampled)")
+    sampled = data.sample(min(200, len(data)))
+    st.pyplot(sns.pairplot(sampled[["PRICE", "SQUARE_FT", "BHK_NO.", "RESALE"]], diag_kind='kde'))
+
 # Sample data preview
 st.markdown("---")
 st.subheader("🔍 Sample Data")
