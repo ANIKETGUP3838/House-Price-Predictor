@@ -185,18 +185,51 @@ with tab1:
     st.pyplot(fig5)
     st.header("📊 Data Visualizations")
 
-    status_counts = data["READY_TO_MOVE"].value_counts().sort_index()
+    st.subheader("🏘️ Property Characteristics Distribution (Pie Charts)")
 
-    # Define labels based on the index values (0 = Under Construction, 1 = Ready to Move)
-    labels = ["Under Construction", "Ready to Move"]
+    # Create two rows of columns
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
 
-    # Create pie chart
-    fig_pie, ax_pie = plt.subplots()
-    ax_pie.pie(status_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FF9999", "#99FF99"])
-    ax_pie.axis("equal")  # Equal aspect ratio ensures that pie is drawn as a circle.
+    # 1. READY_TO_MOVE pie chart
+    with col1:
+        st.markdown("**🏗️ Ready to Move vs Under Construction**")
+        rt_counts = data["READY_TO_MOVE"].value_counts().sort_index()
+        labels = ["Under Construction", "Ready to Move"]
+        fig1, ax1 = plt.subplots()
+        ax1.pie(rt_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FF9999", "#99FF99"])
+        ax1.axis("equal")
+        st.pyplot(fig1)
 
-    # Display in Streamlit
-    st.pyplot(fig_pie)
+    # 2. RESALE pie chart
+    with col2:
+        st.markdown("**🔄 New vs Resale Property**")
+        resale_counts = data["RESALE"].value_counts().sort_index()
+        labels = ["New Property", "Resale Property"]
+        fig2, ax2 = plt.subplots()
+        ax2.pie(resale_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#66B2FF", "#FFCC99"])
+        ax2.axis("equal")
+        st.pyplot(fig2)
+
+    # 3. RERA pie chart
+    with col3:
+        st.markdown("**📋 RERA Approval**")
+        rera_counts = data["RERA"].value_counts().sort_index()
+        labels = ["Not Approved", "RERA Approved"]
+        fig3, ax3 = plt.subplots()
+        ax3.pie(rera_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FFB266", "#99FFCC"])
+        ax3.axis("equal")
+        st.pyplot(fig3)
+
+    # 4. BHK Distribution pie chart
+    with col4:
+        st.markdown("**🛏️ BHK Configuration**")
+        bhk_counts = data["BHK_NO."].value_counts().sort_index()
+        labels = [f"{int(i)} BHK" for i in bhk_counts.index]
+        fig4, ax4 = plt.subplots()
+        ax4.pie(bhk_counts, labels=labels, autopct="%1.1f%%", startangle=90, cmap="viridis")
+        ax4.axis("equal")
+        st.pyplot(fig4)
 
 with tab2:
     st.header("🔍 Sample Data")
