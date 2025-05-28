@@ -64,6 +64,11 @@ r2 = r2_score(y_test, y_pred)
 # Predict for user input
 prediction = model.predict(input_df)[0]
 
+# Sample data preview
+st.markdown("---")
+st.subheader("🔍 Sample Data")
+st.dataframe(data.head())
+
 # Display prediction
 st.subheader("💰 Predicted House Price")
 st.success(f"₹ {prediction:,.0f}")
@@ -141,8 +146,3 @@ with tab2:
     sampled = data.sample(min(200, len(data)))
     pairplot_fig = sns.pairplot(sampled[["PRICE", "SQUARE_FT", "BHK_NO.", "RESALE"]], diag_kind='kde')
     st.pyplot(pairplot_fig.fig)
-
-# Sample data preview
-st.markdown("---")
-st.subheader("🔍 Sample Data")
-st.dataframe(data.head())
