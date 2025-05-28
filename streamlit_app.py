@@ -9,6 +9,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 import shap
 import io
+import folium
+from streamlit_folium import st_folium
 
 st.set_page_config(page_title="🏠 House Price Predictor", layout="wide")
 
@@ -154,8 +156,13 @@ result_df[target] = prediction
 csv = result_df.to_csv(index=False)
 st.download_button(label="Download prediction as CSV", data=csv, file_name="house_price_prediction.csv", mime="text/csv")
 
-# Data preview & some visualizations
-tab1, tab2 = st.tabs(["📊 Visualizations", "🔍 Data Preview"])
+# Simulate lat/lon if not present for demo purposes
+if "LATITUDE" not in data.columns or "LONGITUDE" not in data.columns:
+    np.random.seed(42)
+    data["LATITUDE"] = 28.61 + np.random.normal(0, 0.02, size=len(data))   # Around Delhi latitude
+    data["LONGITUDE"] = 77.23 + np.random.normal(0, 0.02, size=len(data))  # Around Delhi longitude
+
+tab1, tab2, tab3 = st.tabs(["📊 Visualizations", "🔍 Data Preview", "🗺️ Map Visualization"])
 
 with tab1:
     st.header("📊 Data Visualizations")
@@ -187,3 +194,26 @@ with tab1:
 with tab2:
     st.header("🔍 Sample Data")
     st.dataframe(data.head())
+with tab3:
+    st.header("🗺️ House Locations & Prices")
+
+    # Center map around mean lat/lon
+    center = [data["LATITUDE"].mean(), data["LONGITUDE"].mean()]
+
+    m = folium.Map(location=center, zoom_start=12)
+
+    # Add circle markers colored by price
+    for _, row in data.iterrows():
+        folium.CircleMarker(
+            location=[row["LATITUDE"], row["LONGITUDE"]],
+            radius=6,
+            popup=(f"Price: ₹{row['PRICE']:,.0f}<br>"
+                   f"BHK: {row['BHK_NO.']}<br>"
+                   f"SqFt: {row['SQUARE_FT']}"),
+            color='crimson',
+            fill=True,
+            fill_color='crimson',
+            fill_opacity=0.6,
+        ).add_to(m)
+
+    st_folium(m, width=700, height=450)
