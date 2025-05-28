@@ -65,6 +65,12 @@ def user_input():
 
 input_df = user_input()
 
+# Input validation warning
+if input_df["SQUARE_FT"].iloc[0] > data["SQUARE_FT"].max():
+    st.sidebar.warning("Entered square footage is unusually high compared to dataset.")
+if input_df["BHK_NO."].iloc[0] > data["BHK_NO."].max():
+    st.sidebar.warning("Entered BHK number is unusually high compared to dataset.")
+
 # Model selection
 st.sidebar.header("⚙️ Select Model")
 model_choice = st.sidebar.radio("Choose regression model", ("Linear Regression", "Random Forest"))
@@ -97,16 +103,22 @@ else:
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2 = r2_score(y_test, y_pred)
 
-st.subheader("💰 Predicted House Price")
-st.success(f"₹ {prediction:,.0f}")
+# Display key metrics in columns
+col1, col2, col3 = st.columns(3)
+col1.metric("🏠 Predicted Price", f"₹ {prediction:,.0f}")
+col2.metric("📉 RMSE", f"₹ {rmse:,.0f}")
+col3.metric("🎯 R² Score", f"{r2:.2f}")
 
 st.markdown("---")
-st.subheader("📊 Model Evaluation")
-st.write(f"**Model:** {model_choice}")
-st.write(f"**RMSE:** ₹ {rmse:,.0f}")
-st.write(f"**R² Score:** {r2:.2f}")
+st.subheader("📈 Actual vs Predicted Prices")
+fig_avp, ax_avp = plt.subplots()
+sns.scatterplot(x=y_test, y=y_pred, ax=ax_avp)
+ax_avp.set_xlabel("Actual Price")
+ax_avp.set_ylabel("Predicted Price")
+ax_avp.set_title("Actual vs Predicted House Prices")
+st.pyplot(fig_avp)
 
-# Confidence / prediction interval for Random Forest (using quantiles of trees predictions)
+# Confidence / prediction interval
 if model_choice == "Random Forest":
     preds_per_tree = np.array([t.predict(input_df)[0] for t in model.estimators_])
     lower = np.percentile(preds_per_tree, 5)
@@ -132,13 +144,11 @@ if model_choice == "Random Forest":
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_train)
 
-    # Show SHAP summary plot
     st.write("SHAP Summary Plot (global feature impact)")
     fig_shap, ax_shap = plt.subplots()
     shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
     st.pyplot(fig_shap)
 
-    # Show SHAP force plot for user input
     st.write("SHAP Force Plot for your input (local explanation)")
     shap.initjs()
     force_plot = shap.force_plot(explainer.expected_value, 
@@ -154,11 +164,22 @@ result_df[target] = prediction
 csv = result_df.to_csv(index=False)
 st.download_button(label="Download prediction as CSV", data=csv, file_name="house_price_prediction.csv", mime="text/csv")
 
-# Data preview & some visualizations
+# Sample CSV download in sidebar
+st.sidebar.markdown("---")
+st.sidebar.markdown("📥 Need a sample?")
+sample_csv = data[features].head(10).to_csv(index=False)
+st.sidebar.download_button("Download Sample CSV", sample_csv, "sample_input.csv", "text/csv")
+
+# Data preview & visualizations
 tab1, tab2 = st.tabs(["📊 Visualizations", "🔍 Data Preview"])
 
 with tab1:
     st.header("📊 Data Visualizations")
+
+    st.subheader("💹 Price Distribution")
+    fig_hist, ax_hist = plt.subplots()
+    sns.histplot(data["PRICE"], kde=True, ax=ax_hist, color="purple")
+    st.pyplot(fig_hist)
 
     st.subheader("🏗️ Square Foot vs Price")
     fig2, ax2 = plt.subplots()
@@ -183,11 +204,10 @@ with tab1:
     corr = data[features + [target]].corr()
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
-    st.header("📊 Data Visualizations")
 
+    # Pie charts for categorical features
     st.subheader("🏘️ Property Characteristics Distribution (Pie Charts)")
 
-    # Create two rows of columns
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
 
@@ -211,26 +231,26 @@ with tab1:
         ax2.axis("equal")
         st.pyplot(fig2)
 
-    # 3. RERA pie chart
+    # 3. UNDER_CONSTRUCTION pie chart
     with col3:
-        st.markdown("**📋 RERA Approval**")
-        rera_counts = data["RERA"].value_counts().sort_index()
-        labels = ["Not Approved", "RERA Approved"]
+        st.markdown("**🚧 Under Construction Status**")
+        uc_counts = data["UNDER_CONSTRUCTION"].value_counts().sort_index()
+        labels = ["No", "Yes"]
         fig3, ax3 = plt.subplots()
-        ax3.pie(rera_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FFB266", "#99FFCC"])
+        ax3.pie(uc_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FFD700", "#FFA07A"])
         ax3.axis("equal")
         st.pyplot(fig3)
 
-    # 4. BHK Distribution pie chart
+    # 4. RERA pie chart
     with col4:
-        st.markdown("**🛏️ BHK Configuration**")
-        bhk_counts = data["BHK_NO."].value_counts().sort_index()
-        labels = [f"{int(i)} BHK" for i in bhk_counts.index]
+        st.markdown("**✅ RERA Approved**")
+        rera_counts = data["RERA"].value_counts().sort_index()
+        labels = ["No", "Yes"]
         fig4, ax4 = plt.subplots()
-        ax4.pie(bhk_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=plt.cm.viridis(np.linspace(0, 1, len(bhk_counts))))
+        ax4.pie(rera_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#B0C4DE", "#4682B4"])
         ax4.axis("equal")
         st.pyplot(fig4)
 
 with tab2:
-    st.header("🔍 Sample Data")
-    st.dataframe(data.head())
+    st.header("🔍 Data Preview")
+    st.dataframe(data.head(10))
