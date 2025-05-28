@@ -15,12 +15,13 @@ st.title("🏠 House Price Prediction App")
 st.sidebar.header("📁 Upload Your CSV")
 uploaded_file = st.sidebar.file_uploader("Upload 'Test.csv'", type=["csv"])
 
-# Load and simulate price
+# Load and simulate price only if PRICE column missing
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
-    np.random.seed(42)
-    df["PRICE"] = 200000 + (df["SQUARE_FT"] * 4000) + (df["BHK_NO."] * 100000) + np.random.randint(-100000, 100000, size=len(df))
+    if "PRICE" not in df.columns:
+        np.random.seed(42)
+        df["PRICE"] = 200000 + (df["SQUARE_FT"] * 4000) + (df["BHK_NO."] * 100000) + np.random.randint(-100000, 100000, size=len(df))
     return df
 
 if uploaded_file is not None:
@@ -33,8 +34,9 @@ else:
 features = ["UNDER_CONSTRUCTION", "RERA", "BHK_NO.", "SQUARE_FT", "READY_TO_MOVE", "RESALE"]
 target = "PRICE"
 
-# Sidebar: user input
+# Sidebar: user input for prediction
 st.sidebar.header("🏗️ House Features for Prediction")
+
 def user_input():
     under_construction = st.sidebar.selectbox("Under Construction", [0, 1])
     rera = st.sidebar.selectbox("RERA Approved", [0, 1])
@@ -42,8 +44,7 @@ def user_input():
     sqft = st.sidebar.slider("Square Feet", 300, 5000, 1200)
     ready = st.sidebar.selectbox("Ready to Move", [0, 1])
     resale = st.sidebar.selectbox("Is Resale", [0, 1])
-    return pd.DataFrame([[under_construction, rera, bhk, sqft, ready, resale]],
-                        columns=features)
+    return pd.DataFrame([[under_construction, rera, bhk, sqft, ready, resale]], columns=features)
 
 input_df = user_input()
 
@@ -75,35 +76,24 @@ st.write(f"**R² Score:** {r2:.2f}")
 
 # Confidence interval
 st.markdown("### 🔍 Prediction Confidence Interval")
-
 residual_std = np.std(y_test - y_pred)
 lower = prediction - residual_std
 upper = prediction + residual_std
-
 st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
 
+# Tabs for Prediction and Visualization
 tab1, tab2 = st.tabs(["🔮 Prediction", "📊 Visualizations"])
 
 with tab1:
     st.header("🔮 House Price Prediction")
-    
-    st.subheader("🏗️ Enter House Features")
-    under_construction = st.selectbox("Under Construction", [0, 1])
-    rera = st.selectbox("RERA Approved", [0, 1])
-    bhk = st.slider("Number of BHK", 1, 5, 2)
-    sqft = st.slider("Square Feet", 300, 5000, 1200)
-    ready = st.selectbox("Ready to Move", [0, 1])
-    resale = st.selectbox("Is Resale", [0, 1])
 
-    input_df = pd.DataFrame([[under_construction, rera, bhk, sqft, ready, resale]], columns=features)
-    prediction = model.predict(input_df)[0]
+    # Show input features from sidebar as static
+    st.subheader("🏗️ Selected House Features")
+    st.write(input_df)
 
     st.subheader("💰 Predicted Price")
     st.success(f"₹ {prediction:,.0f}")
-    
-    residual_std = np.std(y_test - y_pred)
-    lower = prediction - residual_std
-    upper = prediction + residual_std
+
     st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
 
     st.markdown("---")
@@ -149,7 +139,8 @@ with tab2:
 
     st.subheader("📐 Pairplot (sampled)")
     sampled = data.sample(min(200, len(data)))
-    st.pyplot(sns.pairplot(sampled[["PRICE", "SQUARE_FT", "BHK_NO.", "RESALE"]], diag_kind='kde'))
+    pairplot_fig = sns.pairplot(sampled[["PRICE", "SQUARE_FT", "BHK_NO.", "RESALE"]], diag_kind='kde')
+    st.pyplot(pairplot_fig.fig)
 
 # Sample data preview
 st.markdown("---")
