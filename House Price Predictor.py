@@ -186,51 +186,52 @@ with tab1:
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
 
-    # Pie charts for categorical variables
-    st.subheader("🏘️ Property Characteristics Distribution (Pie Charts)")
+    st.header("📊 Data Visualizations")
 
-    col1, col2 = st.columns(2)
-    col3, col4 = st.columns(2)
+    # PIE CHART 1: Ready to Move vs Under Construction
+    st.subheader("🏗️ Property Status Distribution")
+    status_counts = data["READY_TO_MOVE"].value_counts().sort_index()
+    labels_status = ["Under Construction", "Ready to Move"]
+    colors_status = ["#FF9999", "#99FF99"]
+    
+    fig1, ax1 = plt.subplots()
+    ax1.pie(status_counts, labels=labels_status, autopct="%1.1f%%", startangle=90, colors=colors_status)
+    ax1.axis("equal")
+    st.pyplot(fig1)
+    
+    # PIE CHART 2: RERA Approval Distribution
+    st.subheader("📜 RERA Approval Distribution")
+    rera_counts = data["RERA"].value_counts().sort_index()
+    labels_rera = ["No", "Yes"]
+    colors_rera = ["#FFD700", "#32CD32"]
+    
+    fig2, ax2 = plt.subplots()
+    ax2.pie(rera_counts, labels=labels_rera, autopct="%1.1f%%", startangle=90, colors=colors_rera)
+    ax2.axis("equal")
+    st.pyplot(fig2)
+    
+    # PIE CHART 3: Ready to Move Distribution
+    st.subheader("🏠 Ready to Move Distribution")
+    ready_counts = data["READY_TO_MOVE"].value_counts().sort_index()
+    labels_ready = ["No", "Yes"]
+    colors_ready = ["#FF7F50", "#1E90FF"]
+    
+    fig3, ax3 = plt.subplots()
+    ax3.pie(ready_counts, labels=labels_ready, autopct="%1.1f%%", startangle=90, colors=colors_ready)
+    ax3.axis("equal")
+    st.pyplot(fig3)
+    
+    # PIE CHART 4: Resale Distribution
+    st.subheader("🔄 Resale Property Distribution")
+    resale_counts = data["RESALE"].value_counts().sort_index()
+    labels_resale = ["No", "Yes"]
+    colors_resale = ["#C0C0C0", "#800080"]
+    
+    fig4, ax4 = plt.subplots()
+    ax4.pie(resale_counts, labels=labels_resale, autopct="%1.1f%%", startangle=90, colors=colors_resale)
+    ax4.axis("equal")
+    st.pyplot(fig4)
 
-    # Ready to Move pie chart
-    with col1:
-        st.markdown("**🏗️ Ready to Move vs Under Construction**")
-        rt_counts = data["READY_TO_MOVE"].value_counts().sort_index()
-        labels = ["Under Construction", "Ready to Move"]
-        fig1, ax1 = plt.subplots()
-        ax1.pie(rt_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FF9999", "#99FF99"])
-        ax1.axis("equal")
-        st.pyplot(fig1)
-
-    # Resale pie chart
-    with col2:
-        st.markdown("**🔄 New vs Resale Property**")
-        resale_counts = data["RESALE"].value_counts().sort_index()
-        labels = ["New Property", "Resale Property"]
-        fig2, ax2 = plt.subplots()
-        ax2.pie(resale_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#66B2FF", "#FFCC99"])
-        ax2.axis("equal")
-        st.pyplot(fig2)
-
-    # Under Construction pie chart
-    with col3:
-        st.markdown("**🚧 Under Construction Status**")
-        uc_counts = data["UNDER_CONSTRUCTION"].value_counts().sort_index()
-        labels = ["No", "Yes"]
-        fig3, ax3 = plt.subplots()
-        ax3.pie(uc_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FFD700", "#FFA07A"])
-        ax3.axis("equal")
-        st.pyplot(fig3)
-
-    # RERA pie chart
-    with col4:
-        st.markdown("**✅ RERA Approved**")
-        rera_counts = data["RERA"].value_counts().sort_index()
-        labels = ["No", "Yes"]
-        fig4, ax4 = plt.subplots()
-        ax4.pie(rera_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#B0C4DE", "#4682B4"])
-        ax4.axis("equal")
-        st.pyplot(fig4)
 
 with tab2:
     st.header("🔍 Data Preview")
