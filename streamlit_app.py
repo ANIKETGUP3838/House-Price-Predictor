@@ -185,14 +185,17 @@ with tab1:
     st.pyplot(fig5)
     st.header("📊 Data Visualizations")
 
-    # PIE CHART: Ready vs Under Construction
-    st.subheader("🏗️ Property Status Distribution")
-    status_counts = data["READY_TO_MOVE"].value_counts()
-    labels = ["Under Construction" if i == 0 else "Ready to Move" for i in status_counts.index]
-    
+    status_counts = data["READY_TO_MOVE"].value_counts().sort_index()
+
+    # Define labels based on the index values (0 = Under Construction, 1 = Ready to Move)
+    labels = ["Under Construction", "Ready to Move"]
+
+    # Create pie chart
     fig_pie, ax_pie = plt.subplots()
     ax_pie.pie(status_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FF9999", "#99FF99"])
-    ax_pie.axis("equal")
+    ax_pie.axis("equal")  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+    # Display in Streamlit
     st.pyplot(fig_pie)
 
 with tab2:
