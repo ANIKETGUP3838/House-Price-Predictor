@@ -227,7 +227,7 @@ with tab1:
         bhk_counts = data["BHK_NO."].value_counts().sort_index()
         labels = [f"{int(i)} BHK" for i in bhk_counts.index]
         fig4, ax4 = plt.subplots()
-        ax4.pie(bhk_counts, labels=labels, autopct="%1.1f%%", startangle=90, cmap="viridis")
+        ax4.pie(bhk_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=plt.cm.viridis(np.linspace(0, 1, len(bhk_counts))))
         ax4.axis("equal")
         st.pyplot(fig4)
 
