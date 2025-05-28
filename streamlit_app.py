@@ -183,6 +183,17 @@ with tab1:
     corr = data[features + [target]].corr()
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
+    st.header("📊 Data Visualizations")
+
+    # PIE CHART: Ready vs Under Construction
+    st.subheader("🏗️ Property Status Distribution")
+    status_counts = data["READY_TO_MOVE"].value_counts()
+    labels = ["Under Construction" if i == 0 else "Ready to Move" for i in status_counts.index]
+    
+    fig_pie, ax_pie = plt.subplots()
+    ax_pie.pie(status_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FF9999", "#99FF99"])
+    ax_pie.axis("equal")
+    st.pyplot(fig_pie)
 
 with tab2:
     st.header("🔍 Sample Data")
