@@ -14,14 +14,13 @@ st.set_page_config(page_title="🏠 House Price Predictor", layout="wide")
 
 st.title("🏠 House Price Prediction App")
 
-# Sidebar upload
+# Sidebar: Upload CSV
 st.sidebar.header("📁 Upload Your CSV")
 uploaded_file = st.sidebar.file_uploader("Upload 'Test.csv'", type=["csv"])
 
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
-    # Just a simple fallback to add PRICE if missing
     if "PRICE" not in df.columns:
         np.random.seed(42)
         df["PRICE"] = (
@@ -33,34 +32,38 @@ def load_data(file):
 if uploaded_file is not None:
     data = load_data(uploaded_file)
 else:
-    st.warning("Please upload a `Test.csv` file to proceed.")
+    st.warning("Please upload a Test.csv file to proceed.")
     st.stop()
 
-# Features and target
 features = ["UNDER_CONSTRUCTION", "RERA", "BHK_NO.", "SQUARE_FT", "READY_TO_MOVE", "RESALE"]
 target = "PRICE"
 
-# Sidebar inputs for prediction
 st.sidebar.header("🏗️ House Features for Prediction")
+
+# Tooltips for features
+feature_tooltips = {
+    "UNDER_CONSTRUCTION": "Is the property currently under construction? (0 = No, 1 = Yes)",
+    "RERA": "Is the property RERA approved? (0 = No, 1 = Yes)",
+    "BHK_NO.": "Number of bedrooms, halls, kitchens (BHK)",
+    "SQUARE_FT": "Total square feet area",
+    "READY_TO_MOVE": "Is the property ready to move in? (0 = No, 1 = Yes)",
+    "RESALE": "Is this a resale property? (0 = No, 1 = Yes)"
+}
 
 def user_input():
     inputs = {}
     for feat in features:
         if feat in ["UNDER_CONSTRUCTION", "RERA", "READY_TO_MOVE", "RESALE"]:
-            inputs[feat] = st.sidebar.selectbox(f"{feat.replace('_', ' ').title()}", [0, 1])
+            inputs[feat] = st.sidebar.selectbox(f"{feat.replace('_', ' ').title()}",
+                                               [0, 1],
+                                               help=feature_tooltips[feat])
         elif feat == "BHK_NO.":
-            inputs[feat] = st.sidebar.slider("Number of BHK", 1, 10, 2)
+            inputs[feat] = st.sidebar.slider("Number of BHK", 1, 5, 2, help=feature_tooltips[feat])
         elif feat == "SQUARE_FT":
-            inputs[feat] = st.sidebar.slider("Square Feet", 300, 5000, 1200)
+            inputs[feat] = st.sidebar.slider("Square Feet", 300, 5000, 1200, help=feature_tooltips[feat])
     return pd.DataFrame([inputs])
 
 input_df = user_input()
-
-# Validate inputs vs data ranges
-if input_df["SQUARE_FT"].iloc[0] > data["SQUARE_FT"].max():
-    st.sidebar.warning("Entered square footage is unusually high compared to dataset.")
-if input_df["BHK_NO."].iloc[0] > data["BHK_NO."].max():
-    st.sidebar.warning("Entered BHK number is unusually high compared to dataset.")
 
 # Model selection
 st.sidebar.header("⚙️ Select Model")
@@ -75,6 +78,7 @@ if model_choice == "Linear Regression":
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     prediction = model.predict(input_df)[0]
+    # Feature importance (coefficients)
     fi_df = pd.DataFrame({
         "Feature": features,
         "Importance": model.coef_
@@ -84,6 +88,7 @@ else:
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     prediction = model.predict(input_df)[0]
+    # Feature importance from RF
     fi_df = pd.DataFrame({
         "Feature": features,
         "Importance": model.feature_importances_
@@ -92,22 +97,16 @@ else:
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2 = r2_score(y_test, y_pred)
 
-# Display metrics in columns
-col1, col2, col3 = st.columns(3)
-col1.metric("🏠 Predicted Price", f"₹ {prediction:,.0f}")
-col2.metric("📉 RMSE", f"₹ {rmse:,.0f}")
-col3.metric("🎯 R² Score", f"{r2:.2f}")
+st.subheader("💰 Predicted House Price")
+st.success(f"₹ {prediction:,.0f}")
 
 st.markdown("---")
-st.subheader("📈 Actual vs Predicted Prices")
-fig_avp, ax_avp = plt.subplots()
-sns.scatterplot(x=y_test, y=y_pred, ax=ax_avp)
-ax_avp.set_xlabel("Actual Price")
-ax_avp.set_ylabel("Predicted Price")
-ax_avp.set_title("Actual vs Predicted House Prices")
-st.pyplot(fig_avp)
+st.subheader("📊 Model Evaluation")
+st.write(f"**Model:** {model_choice}")
+st.write(f"**RMSE:** ₹ {rmse:,.0f}")
+st.write(f"**R² Score:** {r2:.2f}")
 
-# Confidence interval
+# Confidence / prediction interval for Random Forest (using quantiles of trees predictions)
 if model_choice == "Random Forest":
     preds_per_tree = np.array([t.predict(input_df)[0] for t in model.estimators_])
     lower = np.percentile(preds_per_tree, 5)
@@ -127,15 +126,25 @@ sns.barplot(data=fi_df, x="Importance", y="Feature", palette="viridis", ax=ax_fi
 ax_fi.set_title("Feature Importance")
 st.pyplot(fig_fi)
 
-# SHAP explainability for Random Forest only
+# SHAP explainability only for Random Forest (to save compute)
 if model_choice == "Random Forest":
     st.subheader("🧠 Model Explanation (SHAP values)")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_train)
+
+    # Show SHAP summary plot
     st.write("SHAP Summary Plot (global feature impact)")
     fig_shap, ax_shap = plt.subplots()
     shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
     st.pyplot(fig_shap)
+
+    # Show SHAP force plot for user input
+    st.write("SHAP Force Plot for your input (local explanation)")
+    shap.initjs()
+    force_plot = shap.force_plot(explainer.expected_value, 
+                                explainer.shap_values(input_df), 
+                                input_df, matplotlib=True)
+    st.pyplot(force_plot)
 
 # Download prediction result
 st.markdown("---")
@@ -145,22 +154,11 @@ result_df[target] = prediction
 csv = result_df.to_csv(index=False)
 st.download_button(label="Download prediction as CSV", data=csv, file_name="house_price_prediction.csv", mime="text/csv")
 
-# Sample CSV download
-st.sidebar.markdown("---")
-st.sidebar.markdown("📥 Need a sample?")
-sample_csv = data[features].head(10).to_csv(index=False)
-st.sidebar.download_button("Download Sample CSV", sample_csv, "sample_input.csv", "text/csv")
-
-# Data visualizations and preview tabs
+# Data preview & some visualizations
 tab1, tab2 = st.tabs(["📊 Visualizations", "🔍 Data Preview"])
 
 with tab1:
     st.header("📊 Data Visualizations")
-
-    st.subheader("💹 Price Distribution")
-    fig_hist, ax_hist = plt.subplots()
-    sns.histplot(data["PRICE"], kde=True, ax=ax_hist, color="purple")
-    st.pyplot(fig_hist)
 
     st.subheader("🏗️ Square Foot vs Price")
     fig2, ax2 = plt.subplots()
@@ -186,53 +184,6 @@ with tab1:
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
 
-    st.header("📊 Data Visualizations")
-
-    # PIE CHART 1: Ready to Move vs Under Construction
-    st.subheader("🏗️ Property Status Distribution")
-    status_counts = data["READY_TO_MOVE"].value_counts().sort_index()
-    labels_status = ["Under Construction", "Ready to Move"]
-    colors_status = ["#FF9999", "#99FF99"]
-    
-    fig1, ax1 = plt.subplots()
-    ax1.pie(status_counts, labels=labels_status, autopct="%1.1f%%", startangle=90, colors=colors_status)
-    ax1.axis("equal")
-    st.pyplot(fig1)
-    
-    # PIE CHART 2: RERA Approval Distribution
-    st.subheader("📜 RERA Approval Distribution")
-    rera_counts = data["RERA"].value_counts().sort_index()
-    labels_rera = ["No", "Yes"]
-    colors_rera = ["#FFD700", "#32CD32"]
-    
-    fig2, ax2 = plt.subplots()
-    ax2.pie(rera_counts, labels=labels_rera, autopct="%1.1f%%", startangle=90, colors=colors_rera)
-    ax2.axis("equal")
-    st.pyplot(fig2)
-    
-    # PIE CHART 3: Ready to Move Distribution
-    st.subheader("🏠 Ready to Move Distribution")
-    ready_counts = data["READY_TO_MOVE"].value_counts().sort_index()
-    labels_ready = ["No", "Yes"]
-    colors_ready = ["#FF7F50", "#1E90FF"]
-    
-    fig3, ax3 = plt.subplots()
-    ax3.pie(ready_counts, labels=labels_ready, autopct="%1.1f%%", startangle=90, colors=colors_ready)
-    ax3.axis("equal")
-    st.pyplot(fig3)
-    
-    # PIE CHART 4: Resale Distribution
-    st.subheader("🔄 Resale Property Distribution")
-    resale_counts = data["RESALE"].value_counts().sort_index()
-    labels_resale = ["No", "Yes"]
-    colors_resale = ["#C0C0C0", "#800080"]
-    
-    fig4, ax4 = plt.subplots()
-    ax4.pie(resale_counts, labels=labels_resale, autopct="%1.1f%%", startangle=90, colors=colors_resale)
-    ax4.axis("equal")
-    st.pyplot(fig4)
-
-
 with tab2:
-    st.header("🔍 Data Preview")
-    st.dataframe(data.head(10))
+    st.header("🔍 Sample Data")
+    st.dataframe(data.head())
