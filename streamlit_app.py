@@ -67,7 +67,7 @@ input_df = user_input()
 
 # Model selection
 st.sidebar.header("⚙️ Select Model")
-model_choice = st.sidebar.radio("Choose regression model", ("Linear Regression","Random Forest"))
+model_choice = st.sidebar.radio("Choose regression model", ("Linear Regression", "Random Forest"))
 
 X = data[features]
 y = data[target]
