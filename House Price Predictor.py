@@ -14,13 +14,14 @@ st.set_page_config(page_title="🏠 House Price Predictor", layout="wide")
 
 st.title("🏠 House Price Prediction App")
 
-# Sidebar: Upload CSV
+# Sidebar upload
 st.sidebar.header("📁 Upload Your CSV")
 uploaded_file = st.sidebar.file_uploader("Upload 'Test.csv'", type=["csv"])
 
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
+    # Just a simple fallback to add PRICE if missing
     if "PRICE" not in df.columns:
         np.random.seed(42)
         df["PRICE"] = (
@@ -35,37 +36,27 @@ else:
     st.warning("Please upload a `Test.csv` file to proceed.")
     st.stop()
 
+# Features and target
 features = ["UNDER_CONSTRUCTION", "RERA", "BHK_NO.", "SQUARE_FT", "READY_TO_MOVE", "RESALE"]
 target = "PRICE"
 
+# Sidebar inputs for prediction
 st.sidebar.header("🏗️ House Features for Prediction")
-
-# Tooltips for features
-feature_tooltips = {
-    "UNDER_CONSTRUCTION": "Is the property currently under construction? (0 = No, 1 = Yes)",
-    "RERA": "Is the property RERA approved? (0 = No, 1 = Yes)",
-    "BHK_NO.": "Number of bedrooms, halls, kitchens (BHK)",
-    "SQUARE_FT": "Total square feet area",
-    "READY_TO_MOVE": "Is the property ready to move in? (0 = No, 1 = Yes)",
-    "RESALE": "Is this a resale property? (0 = No, 1 = Yes)"
-}
 
 def user_input():
     inputs = {}
     for feat in features:
         if feat in ["UNDER_CONSTRUCTION", "RERA", "READY_TO_MOVE", "RESALE"]:
-            inputs[feat] = st.sidebar.selectbox(f"{feat.replace('_', ' ').title()}",
-                                               [0, 1],
-                                               help=feature_tooltips[feat])
+            inputs[feat] = st.sidebar.selectbox(f"{feat.replace('_', ' ').title()}", [0, 1])
         elif feat == "BHK_NO.":
-            inputs[feat] = st.sidebar.slider("Number of BHK", 1, 5, 2, help=feature_tooltips[feat])
+            inputs[feat] = st.sidebar.slider("Number of BHK", 1, 10, 2)
         elif feat == "SQUARE_FT":
-            inputs[feat] = st.sidebar.slider("Square Feet", 300, 5000, 1200, help=feature_tooltips[feat])
+            inputs[feat] = st.sidebar.slider("Square Feet", 300, 5000, 1200)
     return pd.DataFrame([inputs])
 
 input_df = user_input()
 
-# Input validation warning
+# Validate inputs vs data ranges
 if input_df["SQUARE_FT"].iloc[0] > data["SQUARE_FT"].max():
     st.sidebar.warning("Entered square footage is unusually high compared to dataset.")
 if input_df["BHK_NO."].iloc[0] > data["BHK_NO."].max():
@@ -84,7 +75,6 @@ if model_choice == "Linear Regression":
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     prediction = model.predict(input_df)[0]
-    # Feature importance (coefficients)
     fi_df = pd.DataFrame({
         "Feature": features,
         "Importance": model.coef_
@@ -94,7 +84,6 @@ else:
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     prediction = model.predict(input_df)[0]
-    # Feature importance from RF
     fi_df = pd.DataFrame({
         "Feature": features,
         "Importance": model.feature_importances_
@@ -103,7 +92,7 @@ else:
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2 = r2_score(y_test, y_pred)
 
-# Display key metrics in columns
+# Display metrics in columns
 col1, col2, col3 = st.columns(3)
 col1.metric("🏠 Predicted Price", f"₹ {prediction:,.0f}")
 col2.metric("📉 RMSE", f"₹ {rmse:,.0f}")
@@ -118,7 +107,7 @@ ax_avp.set_ylabel("Predicted Price")
 ax_avp.set_title("Actual vs Predicted House Prices")
 st.pyplot(fig_avp)
 
-# Confidence / prediction interval
+# Confidence interval
 if model_choice == "Random Forest":
     preds_per_tree = np.array([t.predict(input_df)[0] for t in model.estimators_])
     lower = np.percentile(preds_per_tree, 5)
@@ -138,23 +127,15 @@ sns.barplot(data=fi_df, x="Importance", y="Feature", palette="viridis", ax=ax_fi
 ax_fi.set_title("Feature Importance")
 st.pyplot(fig_fi)
 
-# SHAP explainability only for Random Forest (to save compute)
+# SHAP explainability for Random Forest only
 if model_choice == "Random Forest":
     st.subheader("🧠 Model Explanation (SHAP values)")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_train)
-
     st.write("SHAP Summary Plot (global feature impact)")
     fig_shap, ax_shap = plt.subplots()
     shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
     st.pyplot(fig_shap)
-
-    st.write("SHAP Force Plot for your input (local explanation)")
-    shap.initjs()
-    force_plot = shap.force_plot(explainer.expected_value, 
-                                explainer.shap_values(input_df), 
-                                input_df, matplotlib=True)
-    st.pyplot(force_plot)
 
 # Download prediction result
 st.markdown("---")
@@ -164,13 +145,13 @@ result_df[target] = prediction
 csv = result_df.to_csv(index=False)
 st.download_button(label="Download prediction as CSV", data=csv, file_name="house_price_prediction.csv", mime="text/csv")
 
-# Sample CSV download in sidebar
+# Sample CSV download
 st.sidebar.markdown("---")
 st.sidebar.markdown("📥 Need a sample?")
 sample_csv = data[features].head(10).to_csv(index=False)
 st.sidebar.download_button("Download Sample CSV", sample_csv, "sample_input.csv", "text/csv")
 
-# Data preview & visualizations
+# Data visualizations and preview tabs
 tab1, tab2 = st.tabs(["📊 Visualizations", "🔍 Data Preview"])
 
 with tab1:
@@ -205,13 +186,13 @@ with tab1:
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
 
-    # Pie charts for categorical features
+    # Pie charts for categorical variables
     st.subheader("🏘️ Property Characteristics Distribution (Pie Charts)")
 
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
 
-    # 1. READY_TO_MOVE pie chart
+    # Ready to Move pie chart
     with col1:
         st.markdown("**🏗️ Ready to Move vs Under Construction**")
         rt_counts = data["READY_TO_MOVE"].value_counts().sort_index()
@@ -221,7 +202,7 @@ with tab1:
         ax1.axis("equal")
         st.pyplot(fig1)
 
-    # 2. RESALE pie chart
+    # Resale pie chart
     with col2:
         st.markdown("**🔄 New vs Resale Property**")
         resale_counts = data["RESALE"].value_counts().sort_index()
@@ -231,7 +212,7 @@ with tab1:
         ax2.axis("equal")
         st.pyplot(fig2)
 
-    # 3. UNDER_CONSTRUCTION pie chart
+    # Under Construction pie chart
     with col3:
         st.markdown("**🚧 Under Construction Status**")
         uc_counts = data["UNDER_CONSTRUCTION"].value_counts().sort_index()
@@ -241,7 +222,7 @@ with tab1:
         ax3.axis("equal")
         st.pyplot(fig3)
 
-    # 4. RERA pie chart
+    # RERA pie chart
     with col4:
         st.markdown("**✅ RERA Approved**")
         rera_counts = data["RERA"].value_counts().sort_index()
