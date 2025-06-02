@@ -3,15 +3,16 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 import shap
 import io
+import warnings
+warnings.filterwarnings("ignore")
 
 st.set_page_config(page_title="🏠 House Price Predictor", layout="wide")
-
 st.title("🏠 House Price Prediction App")
 
 # Sidebar: Upload CSV
@@ -39,8 +40,6 @@ features = ["UNDER_CONSTRUCTION", "RERA", "BHK_NO.", "SQUARE_FT", "READY_TO_MOVE
 target = "PRICE"
 
 st.sidebar.header("🏗️ House Features for Prediction")
-
-# Tooltips for features
 feature_tooltips = {
     "UNDER_CONSTRUCTION": "Is the property currently under construction? (0 = No, 1 = Yes)",
     "RERA": "Is the property RERA approved? (0 = No, 1 = Yes)",
@@ -55,8 +54,8 @@ def user_input():
     for feat in features:
         if feat in ["UNDER_CONSTRUCTION", "RERA", "READY_TO_MOVE", "RESALE"]:
             inputs[feat] = st.sidebar.selectbox(f"{feat.replace('_', ' ').title()}",
-                                               [0, 1],
-                                               help=feature_tooltips[feat])
+                                                [0, 1],
+                                                help=feature_tooltips[feat])
         elif feat == "BHK_NO.":
             inputs[feat] = st.sidebar.slider("Number of BHK", 1, 5, 2, help=feature_tooltips[feat])
         elif feat == "SQUARE_FT":
@@ -73,26 +72,52 @@ X = data[features]
 y = data[target]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-if model_choice == "Linear Regression":
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    prediction = model.predict(input_df)[0]
-    # Feature importance (coefficients)
-    fi_df = pd.DataFrame({
-        "Feature": features,
-        "Importance": model.coef_
-    }).sort_values(by="Importance", key=abs, ascending=False)
-else:
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    prediction = model.predict(input_df)[0]
-    # Feature importance from RF
-    fi_df = pd.DataFrame({
-        "Feature": features,
-        "Importance": model.feature_importances_
-    }).sort_values(by="Importance", ascending=False)
+def train_random_forest(X_train, y_train):
+    rf = RandomForestRegressor(random_state=42)
+    param_dist = {
+        "n_estimators": [100, 200, 300],
+        "max_depth": [None, 10, 20, 30],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4],
+        "max_features": ["auto", "sqrt", "log2"]
+    }
+    rf_cv = RandomizedSearchCV(
+        rf,
+        param_distributions=param_dist,
+        n_iter=20,
+        cv=3,
+        scoring='neg_mean_squared_error',
+        random_state=42,
+        n_jobs=-1
+    )
+    rf_cv.fit(X_train, y_train)
+    return rf_cv.best_estimator_
+
+with st.spinner("Training model..."):
+    if model_choice == "Linear Regression":
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        prediction = model.predict(input_df)[0]
+        fi_df = pd.DataFrame({
+            "Feature": features,
+            "Importance": model.coef_
+        }).sort_values(by="Importance", key=abs, ascending=False)
+        residual_std = np.std(y_test - y_pred)
+        lower = prediction - residual_std
+        upper = prediction + residual_std
+
+    else:
+        model = train_random_forest(X_train, y_train)
+        y_pred = model.predict(X_test)
+        prediction = model.predict(input_df)[0]
+        fi_df = pd.DataFrame({
+            "Feature": features,
+            "Importance": model.feature_importances_
+        }).sort_values(by="Importance", ascending=False)
+        preds_per_tree = np.array([tree.predict(input_df)[0] for tree in model.estimators_])
+        lower = np.percentile(preds_per_tree, 5)
+        upper = np.percentile(preds_per_tree, 95)
 
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2 = r2_score(y_test, y_pred)
@@ -106,16 +131,6 @@ st.write(f"**Model:** {model_choice}")
 st.write(f"**RMSE:** ₹ {rmse:,.0f}")
 st.write(f"**R² Score:** {r2:.2f}")
 
-# Confidence / prediction interval for Random Forest (using quantiles of trees predictions)
-if model_choice == "Random Forest":
-    preds_per_tree = np.array([t.predict(input_df)[0] for t in model.estimators_])
-    lower = np.percentile(preds_per_tree, 5)
-    upper = np.percentile(preds_per_tree, 95)
-else:
-    residual_std = np.std(y_test - y_pred)
-    lower = prediction - residual_std
-    upper = prediction + residual_std
-
 st.markdown("### 🔍 Prediction Confidence Interval")
 st.info(f"Estimated range: ₹ {lower:,.0f} to ₹ {upper:,.0f}")
 
@@ -126,24 +141,22 @@ sns.barplot(data=fi_df, x="Importance", y="Feature", palette="viridis", ax=ax_fi
 ax_fi.set_title("Feature Importance")
 st.pyplot(fig_fi)
 
-# SHAP explainability only for Random Forest (to save compute)
+# SHAP explainability for Random Forest
 if model_choice == "Random Forest":
     st.subheader("🧠 Model Explanation (SHAP values)")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_train)
 
-    # Show SHAP summary plot
     st.write("SHAP Summary Plot (global feature impact)")
     fig_shap, ax_shap = plt.subplots()
     shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
     st.pyplot(fig_shap)
 
-    # Show SHAP force plot for user input
     st.write("SHAP Force Plot for your input (local explanation)")
     shap.initjs()
     force_plot = shap.force_plot(explainer.expected_value, 
-                                explainer.shap_values(input_df), 
-                                input_df, matplotlib=True)
+                                 explainer.shap_values(input_df)[0], 
+                                 input_df.iloc[0], matplotlib=True)
     st.pyplot(force_plot)
 
 # Download prediction result
@@ -154,7 +167,7 @@ result_df[target] = prediction
 csv = result_df.to_csv(index=False)
 st.download_button(label="Download prediction as CSV", data=csv, file_name="house_price_prediction.csv", mime="text/csv")
 
-# Data preview & some visualizations
+# Visualizations and data preview
 tab1, tab2 = st.tabs(["📊 Visualizations", "🔍 Data Preview"])
 
 with tab1:
@@ -183,16 +196,11 @@ with tab1:
     corr = data[features + [target]].corr()
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
-    
-    st.header("📊 Data Visualizations")
 
-    st.subheader("🏘️ Property Characteristics Distribution (Pie Charts)")
-    
-    # Create two rows of columns
+    st.subheader("🏘️ Property Characteristics Distribution")
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
-    
-    # 1. READY_TO_MOVE pie chart
+
     with col1:
         st.markdown("**🏗️ Ready to Move vs Under Construction**")
         rt_counts = data["READY_TO_MOVE"].value_counts().sort_index()
@@ -201,8 +209,7 @@ with tab1:
         ax1.pie(rt_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FF9999", "#99FF99"])
         ax1.axis("equal")
         st.pyplot(fig1)
-    
-    # 2. RESALE pie chart
+
     with col2:
         st.markdown("**🔄 New vs Resale Property**")
         resale_counts = data["RESALE"].value_counts().sort_index()
@@ -211,8 +218,7 @@ with tab1:
         ax2.pie(resale_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#66B2FF", "#FFCC99"])
         ax2.axis("equal")
         st.pyplot(fig2)
-    
-    # 3. RERA pie chart
+
     with col3:
         st.markdown("**📋 RERA Approval**")
         rera_counts = data["RERA"].value_counts().sort_index()
@@ -221,8 +227,7 @@ with tab1:
         ax3.pie(rera_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=["#FFB266", "#99FFCC"])
         ax3.axis("equal")
         st.pyplot(fig3)
-    
-    # 4. BHK Distribution pie chart
+
     with col4:
         st.markdown("**🛏️ BHK Configuration**")
         bhk_counts = data["BHK_NO."].value_counts().sort_index()
@@ -231,8 +236,6 @@ with tab1:
         ax4.pie(bhk_counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=plt.cm.viridis(np.linspace(0, 1, len(bhk_counts))))
         ax4.axis("equal")
         st.pyplot(fig4)
-
-
 
 with tab2:
     st.header("🔍 Sample Data")
