@@ -148,14 +148,13 @@ if model_choice == "Random Forest":
     shap_values = explainer(X_train)
 
     st.write("SHAP Summary Plot (global feature impact)")
-    fig_shap, ax_shap = plt.subplots()
-    shap.plots.bar(shap_values, max_display=10, show=False)
+    fig_shap = shap.plots.bar(shap_values, max_display=10, show=False)
     st.pyplot(fig_shap)
 
     st.write("SHAP Waterfall Plot for Your Input (Local Explanation)")
     shap_input_values = explainer(input_df)
     fig_waterfall = shap.plots.waterfall(shap_input_values[0], show=False)
-    st.pyplot(bbox_inches='tight', dpi=300, clear_figure=True)
+    st.pyplot(fig_waterfall)
 
 # Download prediction result
 st.markdown("---")
