@@ -8,7 +8,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 import shap
-import io
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -79,7 +78,7 @@ def train_random_forest(X_train, y_train):
         "max_depth": [None, 10, 20, 30],
         "min_samples_split": [2, 5, 10],
         "min_samples_leaf": [1, 2, 4],
-        "max_features": ["auto", "sqrt", "log2"]
+        "max_features": ["sqrt", "log2"]
     }
     rf_cv = RandomizedSearchCV(
         rf,
@@ -106,7 +105,6 @@ with st.spinner("Training model..."):
         residual_std = np.std(y_test - y_pred)
         lower = prediction - residual_std
         upper = prediction + residual_std
-
     else:
         model = train_random_forest(X_train, y_train)
         y_pred = model.predict(X_test)
@@ -149,14 +147,13 @@ if model_choice == "Random Forest":
 
     st.write("SHAP Summary Plot (global feature impact)")
     fig_shap, ax_shap = plt.subplots()
-    shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
+    shap.summary_plot(shap_values, X_train, plot_type="bar", show=False)
     st.pyplot(fig_shap)
 
+    # Force plot removed due to incompatibility with Streamlit (no native JS render)
     st.write("SHAP Force Plot for your input (local explanation)")
     shap.initjs()
-    force_plot = shap.force_plot(explainer.expected_value, 
-                                 explainer.shap_values(input_df)[0], 
-                                 input_df.iloc[0], matplotlib=True)
+    force_plot = shap.force_plot(explainer.expected_value, explainer.shap_values(input_df)[0], input_df.iloc[0], matplotlib=True)
     st.pyplot(force_plot)
 
 # Download prediction result
