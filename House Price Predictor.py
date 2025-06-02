@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
@@ -73,17 +73,25 @@ y = data[target]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 def train_random_forest(X_train, y_train):
-    rf = RandomForestRegressor(
-        n_estimators=100,
-        max_depth=10,
-        min_samples_split=2,
-        min_samples_leaf=1,
-        max_features="sqrt",
+    rf = RandomForestRegressor(random_state=42)
+    param_dist = {
+        "n_estimators": [100],  # reduced for speed
+        "max_depth": [None, 10],
+        "min_samples_split": [2],
+        "min_samples_leaf": [1],
+        "max_features": ["sqrt"]
+    }
+    rf_cv = RandomizedSearchCV(
+        rf,
+        param_distributions=param_dist,
+        n_iter=5,
+        cv=3,
+        scoring='neg_mean_squared_error',
         random_state=42,
         n_jobs=-1
     )
-    rf.fit(X_train, y_train)
-    return rf
+    rf_cv.fit(X_train, y_train)
+    return rf_cv.best_estimator_
 
 with st.spinner("Training model..."):
     if model_choice == "Linear Regression":
@@ -136,24 +144,22 @@ st.pyplot(fig_fi)
 # SHAP explainability for Random Forest
 if model_choice == "Random Forest":
     st.subheader("🧠 Model Explanation (SHAP values)")
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_train)
+    explainer = shap.Explainer(model, X_train)
+    shap_values = explainer(X_train)
 
     st.write("SHAP Summary Plot (global feature impact)")
     fig_shap, ax_shap = plt.subplots()
-    shap.summary_plot(shap_values, X_train, plot_type="bar", show=False, max_display=10)
+    shap.plots.bar(shap_values, max_display=10, show=False)
     st.pyplot(fig_shap)
 
-    st.write("SHAP Force Plot for your input (local explanation)")
-    shap.initjs()
-    force_plot = shap.force_plot(explainer.expected_value, 
-                                 explainer.shap_values(input_df)[0], 
-                                 input_df.iloc[0], matplotlib=True)
-    st.pyplot(force_plot)
+    st.write("SHAP Waterfall Plot for Your Input (Local Explanation)")
+    shap_input_values = explainer(input_df)
+    fig_waterfall = shap.plots.waterfall(shap_input_values[0], show=False)
+    st.pyplot(bbox_inches='tight', dpi=300, clear_figure=True)
 
 # Download prediction result
 st.markdown("---")
-st.subheader("📀 Download Your Prediction")
+st.subheader("💾 Download Your Prediction")
 result_df = input_df.copy()
 result_df[target] = prediction
 csv = result_df.to_csv(index=False)
@@ -170,14 +176,14 @@ with tab1:
     sns.regplot(x="SQUARE_FT", y="PRICE", data=data, ax=ax2, line_kws={"color": "red"})
     st.pyplot(fig2)
 
-    st.subheader("🛎️ Average Price by BHK")
+    st.subheader("🛏️ Average Price by BHK")
     avg_price_bhk = data.groupby("BHK_NO.")["PRICE"].mean().reset_index()
     fig3, ax3 = plt.subplots()
     sns.barplot(data=avg_price_bhk, x="BHK_NO.", y="PRICE", palette="Blues", ax=ax3)
     ax3.set_ylabel("Avg Price (₹)")
     st.pyplot(fig3)
 
-    st.subheader("📆 Ready to Move vs Price")
+    st.subheader("📦 Ready to Move vs Price")
     fig4, ax4 = plt.subplots()
     sns.boxplot(data=data, x="READY_TO_MOVE", y="PRICE", palette="Set2", ax=ax4)
     ax4.set_xticklabels(["No", "Yes"])
@@ -189,7 +195,7 @@ with tab1:
     sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
     st.pyplot(fig5)
 
-    st.subheader("🏨 Property Characteristics Distribution")
+    st.subheader("🏘️ Property Characteristics Distribution")
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
 
@@ -221,7 +227,7 @@ with tab1:
         st.pyplot(fig3)
 
     with col4:
-        st.markdown("**🛎️ BHK Configuration**")
+        st.markdown("**🛏️ BHK Configuration**")
         bhk_counts = data["BHK_NO."].value_counts().sort_index()
         labels = [f"{int(i)} BHK" for i in bhk_counts.index]
         fig4, ax4 = plt.subplots()
